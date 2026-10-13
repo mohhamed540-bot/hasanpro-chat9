@@ -1,0 +1,11 @@
+{
+  "name": "Hasanprochat",
+  "description": "دردشه شات صوتي كتابي عربي للجوال",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

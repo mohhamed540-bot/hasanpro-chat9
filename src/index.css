@@ -1,0 +1,255 @@
+@import "tailwindcss";
+
+:root {
+  --app-height: 100dvh;
+  --theme-app-bg: #070b13;
+  --theme-header-bg: #1e1711;
+  --theme-header-border: #3b2c21;
+  --theme-card-bg: #ffffff;
+  --theme-card-border: #e2e8f0;
+  --theme-input-bg: #ffffff;
+  --theme-input-border: #cbd5e1;
+  --theme-primary-btn: #d97706;
+  --theme-accent: #f59e0b;
+  --theme-bubble-bg: #ffffff;
+  --theme-bubble-border: #e2e8f0;
+  --theme-bubble-text: #0f172a;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  height: var(--app-height, 100dvh);
+  max-height: var(--app-height, 100dvh);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overflow-x: hidden !important;
+  background-color: #070b13;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+#root {
+  width: 100%;
+  max-width: 100vw;
+  height: 100%;
+  height: var(--app-height, 100dvh);
+  max-height: var(--app-height, 100dvh);
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow-x: hidden !important;
+  position: relative;
+}
+
+/* Prevent horizontal overflow across entire chat and message containers */
+.no-horizontal-overflow {
+  overflow-x: hidden !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.chat-message-row {
+  position: relative !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.msg-action-btn {
+  position: relative;
+  z-index: 20;
+}
+
+.msg-action-panel {
+  position: absolute !important;
+  z-index: 999 !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Golden Shimmer Animation for Engagement Stars */
+@keyframes goldShimmer {
+  0% {
+    filter: drop-shadow(0 0 1px rgba(245, 158, 11, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.9)) drop-shadow(0 0 12px rgba(251, 191, 36, 0.6));
+  }
+  100% {
+    filter: drop-shadow(0 0 1px rgba(245, 158, 11, 0.4));
+  }
+}
+
+.gold-star-glow {
+  animation: goldShimmer 2.5s ease-in-out infinite;
+}
+
+/* Story Gradient Active Ring Animation */
+@keyframes storyRingPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.8), 0 0 8px 1px rgba(244, 63, 94, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 1), 0 0 14px 3px rgba(236, 72, 153, 0.8);
+  }
+}
+
+.story-active-ring {
+  animation: storyRingPulse 2.8s infinite;
+}
+
+/* Full UI Theme Bubble Skins */
+.bubble-skin-modern {
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+}
+
+.bubble-skin-classic {
+  border-radius: 0.5rem;
+  border-width: 1.5px;
+}
+
+.bubble-skin-glass {
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+}
+
+.bubble-skin-neon {
+  border-radius: 0.875rem;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.25);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+.bubble-skin-gold {
+  border-radius: 1rem;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: linear-gradient(135deg, rgba(255, 251, 235, 0.98) 0%, rgba(254, 243, 199, 0.85) 100%);
+  box-shadow: 0 2px 8px -2px rgba(217, 119, 6, 0.25);
+}
+
+@layer base {
+  body {
+    font-family: 'Cairo', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.7);
+}
+
+/* Subtle Pink Pulse & Glow Animation for @Mentions (وميض خفيف وردي للإشارات) */
+@keyframes mentionPulsePink {
+  0%, 100% {
+    background-color: rgba(255, 241, 242, 0.85);
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.25), 0 2px 6px -1px rgba(244, 63, 94, 0.15);
+    border-color: rgba(251, 113, 133, 0.6);
+  }
+  50% {
+    background-color: rgba(255, 228, 230, 0.98);
+    box-shadow: 0 0 14px 2px rgba(244, 63, 94, 0.35), 0 4px 10px -2px rgba(244, 63, 94, 0.25);
+    border-color: rgba(244, 63, 94, 0.9);
+  }
+}
+
+.mention-pink-flash {
+  animation: mentionPulsePink 2.2s ease-in-out infinite;
+}
+
+/* Eye comfort warm amber filter */
+.eye-comfort-filter {
+  filter: sepia(0.2) hue-rotate(-15deg) contrast(0.95);
+}
+
+/* Floating Live Reactions Animation (تطاير تفاعلات اللايف للأعلى بنعومة) */
+@keyframes floatUpAnimation {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    transform: translateY(-20px) scale(1.15);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(-160px) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-230px) scale(0.8);
+    opacity: 0;
+  }
+}
+
+.animate-float-up {
+  animation: floatUpAnimation 2.2s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
+/* Subtle Typing Indicator Animated Bubble & Dots (مؤشر الكتابة التفاعلي) */
+@keyframes typingBubbleFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes typingDotBounce {
+  0%, 80%, 100% {
+    transform: scale(0.65);
+    opacity: 0.35;
+  }
+  40% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+}
+
+@keyframes typingGlowPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.2), 0 2px 8px -1px rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 16px 2px rgba(245, 158, 11, 0.35), 0 4px 12px -2px rgba(245, 158, 11, 0.25);
+    border-color: rgba(245, 158, 11, 0.7);
+  }
+}
+
+.animate-typing-bubble {
+  animation: typingBubbleFloat 2.6s ease-in-out infinite, typingGlowPulse 2.2s ease-in-out infinite;
+}
+
+.typing-dot-1 {
+  animation: typingDotBounce 1.3s infinite ease-in-out both;
+  animation-delay: -0.32s;
+}
+.typing-dot-2 {
+  animation: typingDotBounce 1.3s infinite ease-in-out both;
+  animation-delay: -0.16s;
+}
+.typing-dot-3 {
+  animation: typingDotBounce 1.3s infinite ease-in-out both;
+  animation-delay: 0s;
+}
+

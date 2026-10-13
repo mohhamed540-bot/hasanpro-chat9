@@ -1,0 +1,16 @@
+{
+  "admin": {
+    "password": "123",
+    "role": "admin",
+    "flag": "👑",
+    "statusQuote": "مدير عام شات حسان برو 🦅",
+    "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+    "likes": 10000,
+    "points": 2000000,
+    "honorBadge": "👑 المدير التنفيذي",
+    "ipAddress": "127.0.0.1",
+    "deviceInfo": "كمبيوتر / هاتف ذكي",
+    "deviceFingerprint": "FP-ADMIN-ORIGIN",
+    "lastSeen": 1791045576921
+  }
+}
