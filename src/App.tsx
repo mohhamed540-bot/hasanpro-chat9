@@ -2458,7 +2458,13 @@ export default function App() {
 
   // Initialize Socket.io with infinite resilience and background keepalive
   useEffect(() => {
-    const s = io(window.location.origin, {
+    // Allows connecting to an external backend server when frontend is hosted on static/serverless platforms (e.g. Vercel)
+    const targetServerUrl =
+      (import.meta.env.VITE_SERVER_URL as string)?.trim() ||
+      (import.meta.env.VITE_BACKEND_URL as string)?.trim() ||
+      window.location.origin;
+
+    const s = io(targetServerUrl, {
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
@@ -3529,8 +3535,30 @@ export default function App() {
       }).catch(() => {});
     }
 
+    // Check socket connection status before attempting login
+    if (!socket || !isConnected) {
+      setLoginError('تعذر الاتصال بسيرفر الدردشة! إذا كان الموقع مرفوعاً على Vercel، تأكد من ربط عنوان سيرفر الـ Backend عبر VITE_SERVER_URL أو استضافة المشروع على منصة تدعم Node.js و WebSockets مثل Render.');
+      setIsSubmitting(false);
+      return;
+    }
+
     setIsSubmitting(true);
     setLoginError(null);
+
+    // Timeout safety net (8 seconds): prevents the button from hanging indefinitely on "جاري..."
+    const loginTimeoutTimer = setTimeout(() => {
+      setIsSubmitting((prev) => {
+        if (prev) {
+          setLoginError('انتهت مهلة استجابة السيرفر (Timeout). يرجى التحقق من اتصال السيرفر بالإنترنت وإعادة المحاولة.');
+          return false;
+        }
+        return false;
+      });
+    }, 8000);
+
+    const clearTimer = () => clearTimeout(loginTimeoutTimer);
+    socket.once('loginSuccess', clearTimer);
+    socket.once('loginError', clearTimer);
 
     const defaultQuote = activeTab === 'visitor' ? 'زائر' : 'عضو جديد';
     const clientFingerprint = generateDeviceFingerprint().fingerprintId;
