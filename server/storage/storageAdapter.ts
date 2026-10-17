@@ -52,33 +52,8 @@ export function getStorageConfigFromEnv(): StorageConfig {
     } catch {}
   }
 
-  // Determine provider from process.env
-  let provider: StorageProviderType = 'local';
-  const envProvider = (process.env.STORAGE_PROVIDER || process.env.MEDIA_STORAGE_DRIVER || '').toLowerCase().trim();
-
-  if (envProvider.includes('s3') || process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || process.env.R2_BUCKET) {
-    provider = 's3_compatible';
-  } else if (envProvider.includes('cloudinary') || process.env.CLOUDINARY_URL || process.env.CLOUDINARY_CLOUD_NAME) {
-    provider = 'cloudinary';
-  } else if (envProvider.includes('supabase') || process.env.SUPABASE_STORAGE_URL) {
-    provider = 'supabase';
-  } else if (envProvider.includes('firebase') || process.env.FIREBASE_STORAGE_BUCKET) {
-    provider = 'firebase';
-  } else if (envProvider.includes('http') || process.env.STORAGE_EXTERNAL_ENDPOINT || process.env.MEDIA_UPLOAD_WEBHOOK) {
-    provider = 'custom_http';
-  }
-
   return {
-    provider,
-    endpoint: process.env.STORAGE_ENDPOINT || process.env.STORAGE_EXTERNAL_ENDPOINT || process.env.S3_ENDPOINT || process.env.MEDIA_UPLOAD_WEBHOOK,
-    bucket: process.env.STORAGE_BUCKET || process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || process.env.R2_BUCKET,
-    region: process.env.STORAGE_REGION || process.env.AWS_REGION || 'auto',
-    accessKey: process.env.STORAGE_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID,
-    secretKey: process.env.STORAGE_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY,
-    apiKey: process.env.STORAGE_API_KEY || process.env.CLOUDINARY_API_KEY,
-    apiSecret: process.env.STORAGE_API_SECRET || process.env.CLOUDINARY_API_SECRET,
-    authToken: process.env.STORAGE_AUTH_TOKEN || process.env.STORAGE_BEARER_TOKEN,
-    publicUrlPrefix: process.env.STORAGE_PUBLIC_URL_PREFIX || process.env.CDN_BASE_URL || process.env.STORAGE_CUSTOM_DOMAIN,
+    provider: 'local',
     localUploadsDir: rootUploadsDir
   };
 }

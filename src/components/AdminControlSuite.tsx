@@ -55,6 +55,8 @@ import {
   createStickerSvgDataUri,
   DEFAULT_EMBLEMS_CONFIG
 } from '../utils/emblemsSystem';
+import { DEFAULT_AVATAR_SVG } from '../utils/avatarConstants';
+import { uploadMediaWithProgress } from '../utils/connectionKeepAlive';
 
 export interface User {
   id: string;
@@ -839,7 +841,7 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="relative">
                             <img
-                              src={m.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
+                              src={m.avatarUrl || DEFAULT_AVATAR_SVG}
                               alt={m.username}
                               className={`w-10 h-10 rounded-xl object-cover border-2 flex-shrink-0 ${
                                 isOnline ? 'border-emerald-500' : 'border-slate-600 grayscale'
@@ -1169,7 +1171,7 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <img
-                          src={user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
+                          src={user.avatarUrl || DEFAULT_AVATAR_SVG}
                           alt={user.username}
                           onClick={() => onOpenUserProfile(user)}
                           className="w-10 h-10 rounded-xl object-cover border-2 border-amber-500/60 cursor-pointer flex-shrink-0 hover:scale-105 transition-transform"
@@ -2301,7 +2303,7 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
                   className="p-2 rounded-lg bg-slate-900 border border-slate-700 flex items-center gap-2"
                 >
                   <img
-                    src={staff.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'}
+                    src={staff.avatarUrl || DEFAULT_AVATAR_SVG}
                     alt={staff.username}
                     className="w-8 h-8 rounded-lg object-cover border border-amber-500/50"
                   />
@@ -2497,7 +2499,7 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <img
-                            src={alert.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
+                            src={alert.avatarUrl || DEFAULT_AVATAR_SVG}
                             alt={alert.username}
                             className="w-7 h-7 rounded-lg object-cover border border-amber-500/60"
                           />
@@ -3677,18 +3679,20 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => {
-                              const res = ev.target?.result as string;
-                              if (res) {
-                                setBannerUrlInput(res);
-                                if (!bannerTitleInput) {
-                                  setBannerTitleInput(file.name.replace(/\.[^/.]+$/, ''));
+                            showToast('جاري رفع البنر... ⏳', 'info');
+                            uploadMediaWithProgress(file)
+                              .then((res) => {
+                                if (res?.url) {
+                                  setBannerUrlInput(res.url);
+                                  if (!bannerTitleInput) {
+                                    setBannerTitleInput(file.name.replace(/\.[^/.]+$/, ''));
+                                  }
+                                  showToast('تم تحميل تصميم البنر بنجاح جاهز للحفظ ✅', 'success');
                                 }
-                                showToast('تم تحميل تصميم البنر بنجاح جاهز للحفظ ✅', 'success');
-                              }
-                            };
-                            reader.readAsDataURL(file);
+                              })
+                              .catch((err) => {
+                                showToast('فشل رفع البنر: ' + (err?.message || 'خطأ'), 'error');
+                              });
                           }
                         }}
                       />
@@ -4030,17 +4034,20 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (ev) => {
-                                const res = ev.target?.result as string;
-                                if (res) {
-                                  setGiftUrlInput(res);
-                                  if (!giftTitleInput) {
-                                    setGiftTitleInput(file.name.replace(/\.[^/.]+$/, ''));
+                              showToast('جاري رفع الهدية/الوسام... ⏳', 'info');
+                              uploadMediaWithProgress(file)
+                                .then((res) => {
+                                  if (res?.url) {
+                                    setGiftUrlInput(res.url);
+                                    if (!giftTitleInput) {
+                                      setGiftTitleInput(file.name.replace(/\.[^/.]+$/, ''));
+                                    }
+                                    showToast('تم تحميل الهدية بنجاح ✅', 'success');
                                   }
-                                }
-                              };
-                              reader.readAsDataURL(file);
+                                })
+                                .catch((err) => {
+                                  showToast('فشل رفع الهدية: ' + (err?.message || 'خطأ'), 'error');
+                                });
                             }
                           }}
                         />
@@ -4247,17 +4254,20 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (ev) => {
-                                const res = ev.target?.result as string;
-                                if (res) {
-                                  setStickerUrlInput(res);
-                                  if (!stickerTitleInput) {
-                                    setStickerTitleInput(file.name.replace(/\.[^/.]+$/, ''));
+                              showToast('جاري رفع الملصق... ⏳', 'info');
+                              uploadMediaWithProgress(file)
+                                .then((res) => {
+                                  if (res?.url) {
+                                    setStickerUrlInput(res.url);
+                                    if (!stickerTitleInput) {
+                                      setStickerTitleInput(file.name.replace(/\.[^/.]+$/, ''));
+                                    }
+                                    showToast('تم تحميل الملصق بنجاح ✅', 'success');
                                   }
-                                }
-                              };
-                              reader.readAsDataURL(file);
+                                })
+                                .catch((err) => {
+                                  showToast('فشل رفع الملصق: ' + (err?.message || 'خطأ'), 'error');
+                                });
                             }
                           }}
                         />
@@ -4495,17 +4505,20 @@ export const AdminControlSuite: React.FC<AdminControlSuiteProps> = ({
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => {
-                                    const res = ev.target?.result as string;
-                                    if (res) {
-                                      setEmojiUrlInput(res);
-                                      if (!emojiTitleInput) {
-                                        setEmojiTitleInput(file.name.replace(/\.[^/.]+$/, ''));
+                                  showToast('جاري رفع الفيس... ⏳', 'info');
+                                  uploadMediaWithProgress(file)
+                                    .then((res) => {
+                                      if (res?.url) {
+                                        setEmojiUrlInput(res.url);
+                                        if (!emojiTitleInput) {
+                                          setEmojiTitleInput(file.name.replace(/\.[^/.]+$/, ''));
+                                        }
+                                        showToast('تم تحميل الفيس بنجاح ✅', 'success');
                                       }
-                                    }
-                                  };
-                                  reader.readAsDataURL(file);
+                                    })
+                                    .catch((err) => {
+                                      showToast('فشل رفع الفيس: ' + (err?.message || 'خطأ'), 'error');
+                                    });
                                 }
                               }}
                             />

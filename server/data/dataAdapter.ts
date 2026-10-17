@@ -26,40 +26,13 @@ export interface IDataDriver {
 }
 
 /**
- * Automatically inspects process.env to determine database driver and credentials
+ * 100% Local JSON file-based database:
+ * No external database connections, instant local file persistence.
  */
 export function getDatabaseConfigFromEnv(): DatabaseConfig {
   const rootDir = path.resolve(__dirname, '../../');
-  const dbUrl = (
-    process.env.DATABASE_URL ||
-    process.env.CLOUD_DB_URL ||
-    process.env.DB_CONNECTION_STRING ||
-    process.env.REMOTE_DATABASE_URL ||
-    ''
-  ).trim();
-
-  let driverType: DatabaseDriverType = 'local_json';
-  if (dbUrl) {
-    if (dbUrl.startsWith('http://') || dbUrl.startsWith('https://')) {
-      driverType = 'cloud_rest';
-    } else {
-      driverType = 'database_url';
-    }
-  }
-
-  const explicitType = (process.env.DATABASE_TYPE || process.env.DB_DRIVER || '').toLowerCase().trim();
-  if (explicitType === 'memory') {
-    driverType = 'memory';
-  } else if (explicitType === 'local' || explicitType === 'json') {
-    driverType = 'local_json';
-  }
-
   return {
-    driverType,
-    databaseUrl: dbUrl || undefined,
-    apiKey: process.env.DATABASE_API_KEY || process.env.DB_API_KEY,
-    authToken: process.env.DATABASE_AUTH_TOKEN || process.env.DB_TOKEN,
-    syncIntervalMs: process.env.DATABASE_SYNC_INTERVAL_MS ? parseInt(process.env.DATABASE_SYNC_INTERVAL_MS, 10) : 5000,
+    driverType: 'local_json',
     localFallbackDir: rootDir
   };
 }

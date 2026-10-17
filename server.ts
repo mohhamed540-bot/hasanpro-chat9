@@ -21,10 +21,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.set('trust proxy', 1);
 
-// Production and Security Headers
+// Production, Security, and Cross-Origin Headers
 app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-filename, x-mime-type');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-XSS-Protection', '1; mode=block');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
   next();
 });
 
@@ -49,7 +55,7 @@ const io = new SocketIOServer(httpServer, {
   perMessageDeflate: false, // Low latency and minimal CPU overhead for high concurrency
   httpCompression: true,
   allowEIO3: true,
-  transports: ['websocket', 'polling']
+  transports: ['polling', 'websocket']
 });
 
 app.use(express.json({ limit: '150mb' }));
@@ -133,6 +139,42 @@ app.post('/api/upload-media', async (req, res) => {
     return res.status(500).json({ success: false, error: 'فشل حفظ الملف على الخادم أو التخزين السحابي' });
   }
 });
+
+/**
+ * Server-side security & payload minimization:
+ * Automatically decodes and converts any incoming data: URL / Base64 into a local /uploads file,
+ * strictly guaranteeing that Socket.IO message payloads contain only tiny URL strings (<1KB).
+ */
+export function ensureMediaUrlNotBase64(url: string | undefined): string | undefined {
+  if (!url || typeof url !== 'string') return url;
+  if (!url.startsWith('data:')) return url;
+
+  try {
+    const matches = url.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return url;
+
+    const mime = matches[1].toLowerCase();
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    let ext = 'bin';
+    if (mime.includes('png')) ext = 'png';
+    else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
+    else if (mime.includes('gif')) ext = 'gif';
+    else if (mime.includes('webp')) ext = 'webp';
+    else if (mime.includes('webm')) ext = 'webm';
+    else if (mime.includes('mp4')) ext = 'mp4';
+    else if (mime.includes('ogg') || mime.includes('audio') || mime.includes('wav')) ext = 'wav';
+
+    const filename = `media_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${ext}`;
+    const filePath = path.join(uploadsDir, filename);
+    fs.writeFileSync(filePath, buffer);
+    return `/uploads/${filename}`;
+  } catch (err) {
+    console.warn('Failed to sanitize base64 media to file:', err);
+    return url;
+  }
+}
 
 // XSS Sanitizer helper
 function sanitizeText(str?: string | null): string {
@@ -866,13 +908,17 @@ export interface GlobalAppearance {
   fontFamily: string;
   wallpaper: string;
   bubbleStyle: string;
+  bannerUrl?: string;
+  logoUrl?: string;
 }
 
 export let globalAppearance: GlobalAppearance = {
   theme: 'dark-gold',
   fontFamily: 'Cairo',
   wallpaper: 'default',
-  bubbleStyle: 'modern'
+  bubbleStyle: 'modern',
+  bannerUrl: '',
+  logoUrl: ''
 };
 
 export let emblemsConfig: EmblemsConfig = {
@@ -1057,6 +1103,17 @@ export function loadStaffMemos() {
   }
 }
 
+// Rooms list (Matching Screenshot 3 + Jail Room)
+let chatRooms: ChatRoom[] = [
+  { id: 'الغرفة العامة', name: 'الغرفة العامة Room (الرئيسية)', desc: 'ملتقى جميع الأعضاء والزوار', isPasswordProtected: false, voiceLimit: 33, activeVoiceCount: 2 },
+  { id: 'السعودية', name: 'Room | السعودية', desc: 'فديتك ياااا السعودية 🇸🇦', isPasswordProtected: false, voiceLimit: 33, activeVoiceCount: 2 },
+  { id: 'العراق', name: 'Room | العراق', desc: 'حياكم روم العراق 🇮🇶', isPasswordProtected: false, voiceLimit: 20, activeVoiceCount: 1 },
+  { id: 'المسابقات', name: 'Room | المسابقات', desc: 'اكتب مسابقات وابدأ اللعب 🎯🔥', isPasswordProtected: false, voiceLimit: 40, activeVoiceCount: 0 },
+  { id: 'خاص vip', name: 'غرفة VIP خاصة 🔒', desc: 'غرفة خاصة لكبار الشخصيات', isPasswordProtected: true, password: 'vip', voiceLimit: 10, activeVoiceCount: 0 },
+  { id: 'صوت حسان برو', name: 'مجلس الصوت المباشر 🎙️', desc: 'صوت جماعي عالي النقاء', isPasswordProtected: false, voiceLimit: 30, activeVoiceCount: 0 },
+  { id: 'سجن حسان برو', name: '🚔 سجن واحتجاز حسان برو', desc: 'غرفة توقيف المخالفين بقرار إداري صارم', isPasswordProtected: true, password: 'jail', voiceLimit: 50, activeVoiceCount: 0 }
+];
+
 export function saveChatRooms() {
   try {
     dataManager.saveChatRooms(chatRooms);
@@ -1158,20 +1215,25 @@ loadEmblems();
 
 // Monitoring events buffer & persistent audit log via Data Layer
 let monitorLogs: MonitorEvent[] = [];
+let auditSaveTimer: NodeJS.Timeout | null = null;
 
 function saveAuditLogs() {
-  try {
-    dataManager.saveAuditLogs(monitorLogs.slice(0, 2000));
-  } catch (err) {
-    console.error('Error saving persistent audit logs:', err);
-  }
+  if (auditSaveTimer) return;
+  auditSaveTimer = setTimeout(() => {
+    auditSaveTimer = null;
+    try {
+      dataManager.saveAuditLogs(monitorLogs.slice(0, 250));
+    } catch (err) {
+      console.error('Error saving persistent audit logs:', err);
+    }
+  }, 3000);
 }
 
 function loadAuditLogs() {
   try {
     const data = dataManager.loadAuditLogsSync<MonitorEvent[]>([]);
     if (Array.isArray(data)) {
-      monitorLogs = data;
+      monitorLogs = data.slice(0, 250);
       return;
     }
   } catch (err) {
@@ -1192,9 +1254,15 @@ function logMonitorEvent(type: MonitorEvent['type'], description: string, actor:
     timestamp: Date.now()
   };
   monitorLogs.unshift(event);
-  if (monitorLogs.length > 2000) monitorLogs.pop();
+  if (monitorLogs.length > 250) monitorLogs.pop();
   saveAuditLogs();
-  io.emit('monitorEvent', event);
+
+  // Optimized Socket Payload: Only stream live audit logs to active admin/super staff
+  users.forEach((u) => {
+    if (u.role === 'admin' || u.role === 'super') {
+      io.to(u.id).emit('monitorEvent', event);
+    }
+  });
 }
 
 // Profile Visitor Record structure (من نقر على صورتي وشاهد ملفي الشخصي وعدد المرات)
@@ -1256,7 +1324,7 @@ const registeredMembers: Record<string, RegisteredMemberInfo> = {
     role: 'admin',
     flag: '👑',
     statusQuote: 'مدير عام شات حسان برو 🦅',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     likes: 10000,
     points: 2000000,
     honorBadge: '👑 المدير التنفيذي',
@@ -1303,17 +1371,6 @@ export function getAllRegisteredMembersPayload() {
     };
   });
 }
-
-// Rooms list (Matching Screenshot 3 + Jail Room)
-let chatRooms: ChatRoom[] = [
-  { id: 'الغرفة العامة', name: 'الغرفة العامة Room (الرئيسية)', desc: 'ملتقى جميع الأعضاء والزوار', isPasswordProtected: false, voiceLimit: 33, activeVoiceCount: 2 },
-  { id: 'السعودية', name: 'Room | السعودية', desc: 'فديتك ياااا السعودية 🇸🇦', isPasswordProtected: false, voiceLimit: 33, activeVoiceCount: 2 },
-  { id: 'العراق', name: 'Room | العراق', desc: 'حياكم روم العراق 🇮🇶', isPasswordProtected: false, voiceLimit: 20, activeVoiceCount: 1 },
-  { id: 'المسابقات', name: 'Room | المسابقات', desc: 'اكتب مسابقات وابدأ اللعب 🎯🔥', isPasswordProtected: false, voiceLimit: 40, activeVoiceCount: 0 },
-  { id: 'خاص vip', name: 'غرفة VIP خاصة 🔒', desc: 'غرفة خاصة لكبار الشخصيات', isPasswordProtected: true, password: 'vip', voiceLimit: 10, activeVoiceCount: 0 },
-  { id: 'صوت حسان برو', name: 'مجلس الصوت المباشر 🎙️', desc: 'صوت جماعي عالي النقاء', isPasswordProtected: false, voiceLimit: 30, activeVoiceCount: 0 },
-  { id: 'سجن حسان برو', name: '🚔 سجن واحتجاز حسان برو', desc: 'غرفة توقيف المخالفين بقرار إداري صارم', isPasswordProtected: true, password: 'jail', voiceLimit: 50, activeVoiceCount: 0 }
-];
 
 // Connected live users store (الأعضاء الفعليون المتواجدون فقط بدون وهمي)
 const users: ConnectedUser[] = [];
@@ -1400,10 +1457,13 @@ function checkAndLogMonitoredWords(
     };
 
     filterAlerts.unshift(alertObj);
-    if (filterAlerts.length > 200) filterAlerts.pop();
+    if (filterAlerts.length > 100) filterAlerts.pop();
 
-    io.emit('newFilterAlert', alertObj);
-    io.emit('filterAlertsList', filterAlerts);
+    users.forEach((u) => {
+      if (u.role === 'admin' || u.role === 'super') {
+        io.to(u.id).emit('newFilterAlert', alertObj);
+      }
+    });
 
     const placeDesc =
       context.type === 'pm'
@@ -1432,6 +1492,16 @@ function getFlagFromCountryCode(code?: string): string {
     .map((char) => 127397 + char.charCodeAt(0));
   return String.fromCodePoint(...codePoints);
 }
+
+// Self-contained Geo Flag API (inspects cloud headers without forcing static country)
+app.get('/api/geo-flag', (req, res) => {
+  const cfCountry = ((req.headers['cf-ipcountry'] || req.headers['x-country-code'] || req.headers['x-appengine-country']) as string) || '';
+  const flag = cfCountry ? getFlagFromCountryCode(cfCountry) : null;
+  res.json({
+    countryCode: cfCountry || null,
+    flag: flag || null
+  });
+});
 
 // Calculate real-time room statistics for pie chart based on real users
 export function getRoomStatistics() {
@@ -1625,7 +1695,6 @@ setInterval(() => {
 
   if (hasChanges) {
     saveMembers();
-    io.emit('allUsers', users);
   }
 }, 60000);
 
@@ -1637,32 +1706,50 @@ io.on('connection', (socket) => {
   const cfCountry = (socket.handshake.headers['cf-ipcountry'] as string) || '';
   const detectedRealFlag = getFlagFromCountryCode(cfCountry);
 
-  // Calculate real connected count across live users
-  const getRealConnectedCount = () => {
-    return users.length;
-  };
-  const currentConnectedCount = getRealConnectedCount();
+  const currentConnectedCount = users.length;
   io.emit('onlineCountUpdated', currentConnectedCount);
 
-  // Send initial data (الأعضاء الحقيقيون المتصلون فقط)
+  // Send minimal initial configuration payload (<2KB)
   socket.emit('initialRoster', {
     onlineCount: currentConnectedCount,
-    users: users,
+    users: [],
     rooms: chatRooms,
-    roomStats: getRoomStatistics(),
-    bannedList: Array.from(bannedRecords.values()),
-    serverSecurity,
-    staffMemos,
-    filterAlerts,
-    monitoredWords,
     shortcuts: chatShortcuts,
     likesSettings,
     marqueeTicker: serverSecurity.marqueeTicker,
-    rolePermissions,
     globalAppearance,
     generalWelcome: generalWelcomeSettings,
     emblemsConfig,
-    stories: getActiveStories()
+    stories: getActiveStories(),
+    serverSecurity: {
+      marqueeTicker: serverSecurity.marqueeTicker,
+      guestsAllowed: serverSecurity.guestsAllowed,
+      emergencyLockdown: serverSecurity.emergencyLockdown,
+      blockExternalLinks: serverSecurity.blockExternalLinks
+    }
+  });
+
+  // Admin Data on-demand (sent ONLY to authorized admin staff to protect bandwidth & privacy)
+  socket.on('getAdminData', () => {
+    const admin = users.find((u) => u.id === socket.id);
+    if (admin && (admin.role === 'admin' || admin.role === 'super')) {
+      socket.emit('adminInitialData', {
+        bannedList: Array.from(bannedRecords.values()),
+        staffMemos,
+        filterAlerts,
+        monitoredWords,
+        rolePermissions,
+        serverSecurity
+      });
+      socket.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
+    }
+  });
+
+  socket.on('getRegisteredMembers', () => {
+    const admin = users.find((u) => u.id === socket.id);
+    if (admin && (admin.role === 'admin' || admin.role === 'super')) {
+      socket.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
+    }
   });
 
   // Emblems & Custom Emojis Listeners (إدارة وعرض الرموز، السوابر، الهدايا، الستيكرات والفيسات)
@@ -1822,13 +1909,10 @@ io.on('connection', (socket) => {
       nameBannerUrl: cleanBannerUrl
     });
 
-    io.emit('wallPosts', wallPosts);
-
-    chatRooms.forEach((r) => {
-      io.to(r.id).emit('roomUsers', { room: r.id, users: users.filter((u) => u.room === r.id) });
-    });
-    io.emit('allUsers', users);
-    io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
+    const targetUser = users.find((u) => u.username.toLowerCase() === cleanUser.toLowerCase());
+    if (targetUser?.room) {
+      io.to(targetUser.room).emit('roomUsers', { room: targetUser.room, users: users.filter((u) => u.room === targetUser.room) });
+    }
 
     logMonitorEvent(
       'role',
@@ -1862,7 +1946,7 @@ io.on('connection', (socket) => {
       registeredMembers[cleanUser] = {
         password: '123',
         role: 'member',
-        flag: '🇸🇦',
+        flag: '🇾🇪',
         statusQuote: 'عضو في حسان برو',
         likes: 0,
         points: 0,
@@ -1880,11 +1964,10 @@ io.on('connection', (socket) => {
       username: cleanUser,
       giftBadges: registeredMembers[cleanUser].giftBadges
     });
-    chatRooms.forEach((r) => {
-      io.to(r.id).emit('roomUsers', { room: r.id, users: users.filter((u) => u.room === r.id) });
-    });
-    io.emit('allUsers', users);
-    io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
+    const targetUser = users.find((u) => u.username.toLowerCase() === cleanUser.toLowerCase());
+    if (targetUser?.room) {
+      io.to(targetUser.room).emit('roomUsers', { room: targetUser.room, users: users.filter((u) => u.room === targetUser.room) });
+    }
 
     logMonitorEvent('likes', `منح هدية/وسام شرفي [${giftTitle || 'وسام'}] لـ [${cleanUser}] بواسطة [${actor.username}]`, actor.username, cleanUser);
     socket.emit('systemAlert', `تم منح الوسام الشرفي لـ [${cleanUser}] بنجاح 🎖️`);
@@ -1915,11 +1998,10 @@ io.on('connection', (socket) => {
       username: cleanUser,
       giftBadges: registeredMembers[cleanUser]?.giftBadges || []
     });
-    chatRooms.forEach((r) => {
-      io.to(r.id).emit('roomUsers', { room: r.id, users: users.filter((u) => u.room === r.id) });
-    });
-    io.emit('allUsers', users);
-    io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
+    const targetUser = users.find((u) => u.username.toLowerCase() === cleanUser.toLowerCase());
+    if (targetUser?.room) {
+      io.to(targetUser.room).emit('roomUsers', { room: targetUser.room, users: users.filter((u) => u.room === targetUser.room) });
+    }
 
     socket.emit('systemAlert', `تمت إزالة الوسام الشرفي من [${cleanUser}].`);
   });
@@ -1969,7 +2051,7 @@ io.on('connection', (socket) => {
     socket.emit('globalAppearanceUpdated', globalAppearance);
   });
 
-  socket.on('updateGlobalAppearance', ({ theme, fontFamily, wallpaper, bubbleStyle }: Partial<GlobalAppearance>) => {
+  socket.on('updateGlobalAppearance', ({ theme, fontFamily, wallpaper, bubbleStyle, bannerUrl, logoUrl }: Partial<GlobalAppearance>) => {
     const admin = users.find((u) => u.id === socket.id);
     if (!admin || (admin.role !== 'admin' && admin.role !== 'super')) {
       socket.emit('systemAlert', 'تعميم الثيم والخط العام محصور بطاقم الإدارة.');
@@ -1979,10 +2061,12 @@ io.on('connection', (socket) => {
     if (fontFamily) globalAppearance.fontFamily = fontFamily;
     if (wallpaper) globalAppearance.wallpaper = wallpaper;
     if (bubbleStyle) globalAppearance.bubbleStyle = bubbleStyle;
+    if (bannerUrl !== undefined) globalAppearance.bannerUrl = bannerUrl;
+    if (logoUrl !== undefined) globalAppearance.logoUrl = logoUrl;
     saveGlobalAppearance();
     io.emit('globalAppearanceUpdated', globalAppearance);
     logMonitorEvent('role', `تعميم مظهر الشات (ثيم: ${globalAppearance.theme}، خط: ${globalAppearance.fontFamily}) بواسطة ${admin.username}`, admin.username);
-    socket.emit('systemAlert', 'تم تعميم الثيم والخط على كافة الأعضاء في الشات كاملاً 📢');
+    socket.emit('systemAlert', 'تم تعميم وتحديث مظهر الشات على كافة الأعضاء بنجاح 📢');
   });
 
   // User Style Updates (تحديث لون الاسم ولون خط الرسائل واستدامته فوراً للجميع)
@@ -2020,11 +2104,9 @@ io.on('connection', (socket) => {
       profileBg: user.profileBg
     });
 
-    chatRooms.forEach((r) => {
-      io.to(r.id).emit('roomUsers', { room: r.id, users: users.filter((u) => u.room === r.id) });
-    });
-    io.emit('allUsers', users);
-    io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
+    if (user.room) {
+      io.to(user.room).emit('roomUsers', { room: user.room, users: users.filter((u) => u.room === user.room) });
+    }
     socket.emit('systemAlert', 'تم حفظ وتحديث تنسيق اسمك ولون خطك للجميع بنجاح ✨');
   });
 
@@ -2107,9 +2189,7 @@ io.on('connection', (socket) => {
       timestamp: Date.now()
     });
     io.to(currentRoom).emit('roomUsers', { room: currentRoom, users: users.filter((u) => u.room === currentRoom) });
-    io.emit('allUsers', users);
-    io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
-    io.emit('roomStatsUpdated', getRoomStatistics());
+    io.emit('onlineCountUpdated', users.length);
     socket.emit('leftRoomSuccess', { room: currentRoom });
   });
 
@@ -2304,8 +2384,17 @@ io.on('connection', (socket) => {
         users: users.filter((u) => u.room === targetRoom)
       });
       io.emit('onlineCountUpdated', users.length);
-      io.emit('allUsers', users);
-      io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
+      if (session.user.role === 'admin' || session.user.role === 'super') {
+        socket.emit('adminInitialData', {
+          bannedList: Array.from(bannedRecords.values()),
+          staffMemos,
+          filterAlerts,
+          monitoredWords,
+          rolePermissions,
+          serverSecurity
+        });
+        socket.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
+      }
     } else {
       socket.emit('sessionRestoreFailed', { reason: 'انتهت صلاحية الجلسة أو تم تسجيل الدخول من جهاز آخر.' });
     }
@@ -2348,14 +2437,10 @@ io.on('connection', (socket) => {
         io.to(user.room).emit('micSlotsUpdated', slots);
       }
       logMonitorEvent('leave', `سجل ${user.username} خروجاً رسمياً من الدردشة`, user.username);
-      socket.leave(user.room);
-      chatRooms.forEach((r) => {
-        io.to(r.id).emit('roomUsers', { room: r.id, users: users.filter((u) => u.room === r.id) });
-      });
+      if (user.room) {
+        io.to(user.room).emit('roomUsers', { room: user.room, users: users.filter((u) => u.room === user.room) });
+      }
       io.emit('onlineCountUpdated', users.length);
-      io.emit('allUsers', users);
-      io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
-      io.emit('roomStatsUpdated', getRoomStatistics());
     }
 
     socket.emit('loggedOutSuccess');
@@ -2396,7 +2481,7 @@ io.on('connection', (socket) => {
     const accounts = Array.from(nicksSet);
 
     const resolvedDevice = targetUser?.deviceInfo || ipToDeviceMap.get(targetIp) || parseDeviceInfo(socket.handshake.headers['user-agent'] as string);
-    const resolvedCountry = targetUser?.flag || ipToCountryMap.get(targetIp) || '🇸🇦';
+    const resolvedCountry = targetUser?.flag || ipToCountryMap.get(targetIp) || '🇾🇪';
     const resolvedFingerprint = targetUser?.deviceFingerprint || (registeredMembers[cleanTargetName] as any)?.deviceFingerprint || ipToFingerprintMap.get(targetIp) || 'FP-DEV-STANDARD';
 
     socket.emit('revealedNicksResult', {
@@ -2522,12 +2607,10 @@ io.on('connection', (socket) => {
     }
 
     io.emit('userPresenceUpdated', { userId: user.id, username: user.username, state });
-    io.emit('allUsers', users);
     io.to(user.room).emit('roomUsers', {
       room: user.room,
       users: users.filter((u) => u.room === user.room)
     });
-    io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
   });
 
   // Sync Room Messages when user returns to foreground from background
@@ -2792,7 +2875,7 @@ io.on('connection', (socket) => {
       registeredMembers[cleanUsername] = {
         password: password || '123',
         role: 'member',
-        flag: detectedRealFlag || flag || '🇸🇦',
+        flag: detectedRealFlag || flag || '🇾🇪',
         statusQuote: statusQuote || 'عضو جديد',
         likes: 500,
         points: 10000,
@@ -2812,7 +2895,7 @@ io.on('connection', (socket) => {
         registeredMembers[cleanUsername] = {
           password: '123',
           role: 'guest',
-          flag: detectedRealFlag || flag || '🇸🇦',
+          flag: detectedRealFlag || flag || '🇾🇪',
           statusQuote: 'زائر',
           likes: 100,
           points: 500,
@@ -2911,7 +2994,7 @@ io.on('connection', (socket) => {
     }
 
     const reg = registeredMembers[cleanUsername];
-    const realFlag = detectedRealFlag || flag || reg?.flag || '🇸🇦';
+    const realFlag = detectedRealFlag || flag || reg?.flag || '🇾🇪';
     const clientUserAgent = (socket.handshake.headers['user-agent'] as string) || '';
     const clientDevice = parseDeviceInfo(clientUserAgent);
 
@@ -3069,17 +3152,25 @@ io.on('connection', (socket) => {
       });
     }
 
-    // Broadcast updated room users list and real online count
-    chatRooms.forEach((r) => {
-      io.to(r.id).emit('roomUsers', {
-        room: r.id,
-        users: users.filter((u) => u.room === r.id)
-      });
+    // Minimal Socket Payload: Only broadcast roomUsers to the affected room
+    io.to(finalTargetRoom).emit('roomUsers', {
+      room: finalTargetRoom,
+      users: users.filter((u) => u.room === finalTargetRoom)
     });
     io.emit('onlineCountUpdated', users.length);
-    io.emit('allUsers', users);
-    io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
-    io.emit('roomStatsUpdated', getRoomStatistics());
+
+    // Send admin data only to admin/super users
+    if (newUser.role === 'admin' || newUser.role === 'super') {
+      socket.emit('adminInitialData', {
+        bannedList: Array.from(bannedRecords.values()),
+        staffMemos,
+        filterAlerts,
+        monitoredWords,
+        rolePermissions,
+        serverSecurity
+      });
+      socket.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
+    }
   });
 
   // User typing indicator event (بث حالة الكتابة الآن للأعضاء في نفس الغرفة مع وميض وتأثير بصري)
@@ -3181,6 +3272,16 @@ io.on('connection', (socket) => {
     // Automatic Chat Shortcut Expansion (توسيع واستبدال الاختصارات تلقائياً)
     const expandedMsg = cleanMsg ? expandShortcuts(cleanMsg) : '';
 
+    // Guarantee short URLs (<1KB payload) by converting any client base64 to local disk storage
+    const safeMediaUrl = ensureMediaUrlNotBase64(mediaUrl);
+    let safeVoiceNote = voiceNote;
+    if (voiceNote?.audioUrl) {
+      safeVoiceNote = {
+        ...voiceNote,
+        audioUrl: ensureMediaUrlNotBase64(voiceNote.audioUrl) || voiceNote.audioUrl
+      };
+    }
+
     const messageObj: StoredMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       room: user.room,
@@ -3191,9 +3292,9 @@ io.on('connection', (socket) => {
       badge: user.role === 'admin' ? 'الإدارة' : user.role === 'super' ? 'سوبر' : undefined,
       badgeColor: user.role === 'admin' ? 'text-red-600' : 'text-amber-400',
       text: expandedMsg,
-      mediaUrl,
+      mediaUrl: safeMediaUrl,
       mediaType,
-      voiceNote,
+      voiceNote: safeVoiceNote,
       replyTo,
       time: getCurrentTimeString(),
       timestamp: Date.now(),
@@ -3204,6 +3305,7 @@ io.on('connection', (socket) => {
     };
 
     chatHistory.push(messageObj);
+    if (chatHistory.length > 500) chatHistory = chatHistory.slice(-500);
     saveHistory();
 
     // Increment engagement messages count & calculate progression
@@ -3257,6 +3359,7 @@ io.on('connection', (socket) => {
     };
 
     chatHistory.push(alertMessageObj);
+    if (chatHistory.length > 500) chatHistory = chatHistory.slice(-500);
     saveHistory();
 
     io.to(user.room).emit('generalAlert', {
@@ -4697,6 +4800,7 @@ io.on('connection', (socket) => {
       timestamp: Date.now()
     };
     chatHistory.push(winMsg);
+    if (chatHistory.length > 500) chatHistory = chatHistory.slice(-500);
     saveHistory();
     io.to(user.room).emit('message', winMsg);
   });
@@ -4815,6 +4919,15 @@ io.on('connection', (socket) => {
         const now = Date.now();
         const validSelfDestruct = typeof selfDestructSeconds === 'number' && selfDestructSeconds > 0 ? selfDestructSeconds : undefined;
 
+        const safePmMediaUrl = ensureMediaUrlNotBase64(mediaUrl);
+        let safePmVoiceNote = voiceNote;
+        if (voiceNote?.audioUrl) {
+          safePmVoiceNote = {
+            ...voiceNote,
+            audioUrl: ensureMediaUrlNotBase64(voiceNote.audioUrl) || voiceNote.audioUrl
+          };
+        }
+
         const pm: PrivateMessage = {
           id: `pm-${now}-${Math.random().toString(36).substring(2, 6)}`,
           fromId: sender.id,
@@ -4825,8 +4938,8 @@ io.on('connection', (socket) => {
           toUsername: recipient.username,
           toNameBannerUrl: recipient.nameBannerUrl,
           text: expandedPmText,
-          mediaUrl,
-          voiceNote,
+          mediaUrl: safePmMediaUrl,
+          voiceNote: safePmVoiceNote,
           replyTo,
           time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
           timestamp: now,
@@ -4923,7 +5036,7 @@ io.on('connection', (socket) => {
     // Emit live floating like alert with sender avatar and name to the recipient
     io.to(target.id).emit('receivedProfileLike', {
       fromUsername: sender.username,
-      fromAvatar: sender.avatarUrl || '/src/assets/images/falcon_avatar_icon_1790379613880.jpg',
+      fromAvatar: sender.avatarUrl || '',
       flag: sender.flag,
       likes: target.likes,
       timestamp: Date.now()
@@ -5340,8 +5453,6 @@ io.on('connection', (socket) => {
         if (currentU && (currentU.id === disconnectedSocketId || currentU.presenceState !== 'offline')) {
           currentU.presenceState = 'away';
           io.emit('userPresenceUpdated', { userId: currentU.id, username: currentU.username, state: 'away' });
-          io.emit('allUsers', users);
-          io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
         }
       }, 45000); // 45 seconds (45 ثانية عند انقطاع الاتصال)
 
@@ -5424,10 +5535,7 @@ setInterval(() => {
   }
 
   if (changed) {
-    io.emit('allUsers', users);
     io.emit('onlineCountUpdated', users.length);
-    io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
-    io.emit('roomStatsUpdated', getRoomStatistics());
   }
 }, 60000);
 

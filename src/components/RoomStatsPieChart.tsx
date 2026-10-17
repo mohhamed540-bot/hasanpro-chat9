@@ -14,6 +14,7 @@ import {
   Sparkles,
   Award
 } from 'lucide-react';
+import { DEFAULT_AVATAR_SVG } from '../utils/avatarConstants';
 
 export interface RoomStatUser {
   id: string;
@@ -648,7 +649,7 @@ export const RoomStatsPieChart: React.FC<RoomStatsPieChartProps> = ({
                             className="p-1.5 rounded-lg bg-white border border-slate-200 shadow-xs flex items-center gap-2 hover:border-amber-400 transition-colors cursor-pointer"
                           >
                             <img
-                              src={u.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.username)}`}
+                              src={u.avatarUrl || DEFAULT_AVATAR_SVG}
                               alt={u.username}
                               className="w-6 h-6 rounded-full object-cover border border-slate-200 flex-shrink-0"
                             />

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Trash2, Send, Play, Pause } from 'lucide-react';
+import { uploadMediaWithProgress } from '../utils/connectionKeepAlive';
 
 export interface VoiceNoteData {
   audioUrl: string;
@@ -131,25 +132,29 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onSendVoice, onCan
         }
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = (reader.result as string) || '';
-          setAudioBlobUrl(base64);
-          audioBlobUrlRef.current = base64;
-
-          const finalSec = Math.max(1, Math.floor((Date.now() - startTimeRef.current) / 1000));
-          if (pendingSendRef.current) {
-            pendingSendRef.current = false;
-            onSendVoice({
-              audioUrl: base64,
-              duration: finalSec
-            });
-          }
-        };
-        reader.readAsDataURL(audioBlob);
         stream.getTracks().forEach((t) => t.stop());
+        const finalSec = Math.max(1, Math.floor((Date.now() - startTimeRef.current) / 1000));
+
+        try {
+          const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+          const audioFile = new File([audioBlob], `voice_${Date.now()}.${ext}`, { type: mimeType });
+          const res = await uploadMediaWithProgress(audioFile);
+          if (res?.url) {
+            setAudioBlobUrl(res.url);
+            audioBlobUrlRef.current = res.url;
+            if (pendingSendRef.current) {
+              pendingSendRef.current = false;
+              onSendVoice({
+                audioUrl: res.url,
+                duration: finalSec
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to upload audio binary:', err);
+        }
       };
 
       mediaRecorder.start(100);

@@ -90,8 +90,8 @@ import {
   AlertSoundId
 } from './utils/soundEffects';
 import { generateAndDownloadProjectZip } from './utils/zipExport';
-import bannerImg from './assets/images/falcon_chat_banner_1790379600125.jpg';
-import falconIcon from './assets/images/falcon_avatar_icon_1790379613880.jpg';
+import { DEFAULT_AVATAR_SVG } from './utils/avatarConstants';
+const falconIcon = DEFAULT_AVATAR_SVG;
 
 import { AudioEqualizerAndEffects } from './components/AudioEqualizerAndEffects';
 import { InteractiveGamesSuite } from './components/InteractiveGamesSuite';
@@ -1281,25 +1281,7 @@ function renderFormattedMessageText(
   });
 }
 
-// Sample Media Pictures to Send
-const SAMPLE_MEDIA = [
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&auto=format&fit=crop&q=80'
-];
 
-// Curated avatar choices for setting profile picture
-const SAMPLE_AVATARS = [
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&auto=format&fit=crop&q=80'
-];
 
 export default function App() {
   // Socket & Connection
@@ -1323,9 +1305,10 @@ export default function App() {
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [detectedFlag, setDetectedFlag] = useState('🇸🇦');
+  const [detectedFlag, setDetectedFlag] = useState<string>('🇾🇪');
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [globalBannerUrl, setGlobalBannerUrl] = useState<string>('');
 
   // Chat Data & Stream (Screenshot 2)
   // Preserved in sessionStorage for this browser tab session;
@@ -2357,49 +2340,88 @@ export default function App() {
   useEffect(() => {
     let isCancelled = false;
     const detectRealFlag = async () => {
+      // Clear any manual flag override so flag is strictly authoritative from real IP
       try {
-        const res = await fetch('https://ipapi.co/json/');
-        if (res.ok) {
-          const data = await res.json();
-          if (!isCancelled && data.country_code) {
-            const flagEmoji = data.country_code
+        localStorage.removeItem('soqoor_user_flag');
+      } catch {}
+
+      // 1. Direct browser IP Geolocation (originates from user's actual phone / connection in Yemen)
+      try {
+        const geoRes = await fetch('https://api.country.is/');
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          if (!isCancelled && geoData.country && geoData.country.length === 2) {
+            const codePoints = geoData.country
               .toUpperCase()
               .split('')
-              .map((c: string) => String.fromCodePoint(127397 + c.charCodeAt(0)))
-              .join('');
+              .map((c: string) => 127397 + c.charCodeAt(0));
+            const flagEmoji = String.fromCodePoint(...codePoints);
             if (flagEmoji) {
               setDetectedFlag(flagEmoji);
               return;
             }
           }
         }
-      } catch {
-        // Fallback to timezone
-      }
+      } catch {}
 
+      // 3. Fallback client IP Geolocation
       try {
-        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone.toLowerCase();
-        if (tz.includes('riyadh') || tz.includes('saudi')) setDetectedFlag('🇸🇦');
-        else if (tz.includes('aden') || tz.includes('sanaa') || tz.includes('yemen')) setDetectedFlag('🇾🇪');
-        else if (tz.includes('damascus') || tz.includes('syria')) setDetectedFlag('🇸🇾');
+        const ipRes = await fetch('https://freeipapi.com/api/json');
+        if (ipRes.ok) {
+          const ipData = await ipRes.json();
+          if (!isCancelled && ipData.countryCode && ipData.countryCode.length === 2) {
+            const codePoints = ipData.countryCode
+              .toUpperCase()
+              .split('')
+              .map((c: string) => 127397 + c.charCodeAt(0));
+            const flagEmoji = String.fromCodePoint(...codePoints);
+            if (flagEmoji) {
+              setDetectedFlag(flagEmoji);
+              return;
+            }
+          }
+        }
+      } catch {}
+
+      // 4. Server cloud headers if available
+      try {
+        const res = await fetch('/api/geo-flag');
+        if (res.ok) {
+          const data = await res.json();
+          if (!isCancelled && data.flag) {
+            setDetectedFlag(data.flag);
+            return;
+          }
+        }
+      } catch {}
+
+      // 5. Browser Locale and Timezone signals
+      try {
+        const tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || '').toLowerCase();
+        const langs = (navigator.languages || [navigator.language]).map((l) => (l || '').toLowerCase());
+        const isYemenLocale = langs.some((l) => l.includes('-ye') || l.includes('_ye'));
+
+        if (isYemenLocale || tz.includes('aden') || tz.includes('sanaa') || tz.includes('yemen')) setDetectedFlag('🇾🇪');
+        else if (tz.includes('riyadh')) setDetectedFlag('🇸🇦');
         else if (tz.includes('cairo') || tz.includes('egypt')) setDetectedFlag('🇪🇬');
-        else if (tz.includes('algiers') || tz.includes('algeria')) setDetectedFlag('🇩🇿');
         else if (tz.includes('baghdad') || tz.includes('iraq')) setDetectedFlag('🇮🇶');
-        else if (tz.includes('dubai') || tz.includes('uae')) setDetectedFlag('🇦🇪');
+        else if (tz.includes('damascus') || tz.includes('syria')) setDetectedFlag('🇸🇾');
+        else if (tz.includes('algiers') || tz.includes('algeria')) setDetectedFlag('🇩🇿');
+        else if (tz.includes('casablanca') || tz.includes('morocco')) setDetectedFlag('🇲🇦');
+        else if (tz.includes('amman') || tz.includes('jordan')) setDetectedFlag('🇯🇴');
         else if (tz.includes('kuwait')) setDetectedFlag('🇰🇼');
+        else if (tz.includes('dubai') || tz.includes('uae')) setDetectedFlag('🇦🇪');
         else if (tz.includes('qatar')) setDetectedFlag('🇶🇦');
         else if (tz.includes('bahrain')) setDetectedFlag('🇧🇭');
         else if (tz.includes('muscat') || tz.includes('oman')) setDetectedFlag('🇴🇲');
-        else if (tz.includes('amman') || tz.includes('jordan')) setDetectedFlag('🇯🇴');
-        else if (tz.includes('casablanca') || tz.includes('morocco')) setDetectedFlag('🇲🇦');
         else if (tz.includes('tunis') || tz.includes('tunisia')) setDetectedFlag('🇹🇳');
-        else if (tz.includes('beirut') || tz.includes('lebanon')) setDetectedFlag('🇱🇧');
-        else if (tz.includes('gaza') || tz.includes('jerusalem') || tz.includes('hebron')) setDetectedFlag('🇵🇸');
         else if (tz.includes('tripoli') || tz.includes('libya')) setDetectedFlag('🇱🇾');
         else if (tz.includes('khartoum') || tz.includes('sudan')) setDetectedFlag('🇸🇩');
-        else setDetectedFlag('🇸🇦');
+        else if (tz.includes('beirut') || tz.includes('lebanon')) setDetectedFlag('🇱🇧');
+        else if (tz.includes('gaza') || tz.includes('jerusalem') || tz.includes('hebron')) setDetectedFlag('🇵🇸');
+        else setDetectedFlag('🇾🇪');
       } catch {
-        setDetectedFlag('🇸🇦');
+        setDetectedFlag('🇾🇪');
       }
     };
     detectRealFlag();
@@ -2458,45 +2480,44 @@ export default function App() {
 
   // Initialize Socket.io with infinite resilience and background keepalive
   useEffect(() => {
-    // Allows connecting to an external backend server when frontend is hosted on static/serverless platforms (e.g. Vercel)
-    const targetServerUrl =
-      (import.meta.env.VITE_SERVER_URL as string)?.trim() ||
-      (import.meta.env.VITE_BACKEND_URL as string)?.trim() ||
-      window.location.origin;
+    // Clean up bulky legacy localStorage keys to ensure browser memory stays ultra-lean
+    try {
+      localStorage.removeItem('soqoor_current_user');
+      localStorage.removeItem('soqoor_role_permissions');
+      localStorage.removeItem('user_friends_list');
+      localStorage.removeItem('soqoor_ignored_users');
+    } catch {}
 
-    const s = io(targetServerUrl, {
+    // Always connect locally to the current preview origin (100% local, self-contained, no external hosting)
+    const s = io({
       reconnection: true,
       reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 4000,
+      reconnectionDelay: 800,
+      reconnectionDelayMax: 3000,
       randomizationFactor: 0.2,
-      timeout: 45000,
-      transports: ['websocket', 'polling'],
+      timeout: 30000,
+      transports: ['polling', 'websocket'],
       autoConnect: true
     });
 
     s.on('connect', () => {
       setIsConnected(true);
       setConnectionState('connected');
+      setLoginError(null);
 
       // Do NOT restore session if user was explicitly force-logged out due to another device login
       if (isForcedLoggedOutRef.current) {
         return;
       }
 
-      // Immediately restore previous session on connect / reconnect without requiring page refresh
+      // Immediately restore previous session on connect / reconnect using minimal session token
       const savedToken = localStorage.getItem('soqoor_session_token') || sessionStorage.getItem('soqoor_session_token');
-      const savedUserStr = localStorage.getItem('soqoor_current_user') || sessionStorage.getItem('soqoor_current_user');
-      if (savedToken && savedUserStr) {
-        try {
-          const parsed = JSON.parse(savedUserStr);
-          s.emit('restoreSession', {
-            sessionToken: savedToken,
-            username: parsed.username,
-            room: currentUserRef.current?.room || parsed.room || 'الغرفة العامة',
-            deviceFingerprint: generateDeviceFingerprint().fingerprintId
-          });
-        } catch {}
+      if (savedToken) {
+        s.emit('restoreSession', {
+          sessionToken: savedToken,
+          room: currentUserRef.current?.room || 'الغرفة العامة',
+          deviceFingerprint: generateDeviceFingerprint().fingerprintId
+        });
       }
 
       // Flush any queued messages that were written during temporary network disconnect or in background
@@ -2542,8 +2563,11 @@ export default function App() {
 
     s.on('connect_error', () => {
       setIsConnected(false);
+      setIsSubmitting(false);
       if (currentUserRef.current && !isForcedLoggedOutRef.current) {
         setConnectionState('reconnecting');
+      } else {
+        setConnectionState('disconnected');
       }
     });
 
@@ -2630,7 +2654,24 @@ export default function App() {
         if (!localFont && ga.fontFamily) setFontFamily(ga.fontFamily);
         if (!localWallpaper && ga.wallpaper) setActiveWallpaper(ga.wallpaper);
         if (!localBubble && ga.bubbleStyle) setBubbleStyle(ga.bubbleStyle);
+        if (ga.bannerUrl) setGlobalBannerUrl(ga.bannerUrl);
       }
+    });
+
+    s.on('adminInitialData', (data: {
+      bannedList?: any[];
+      serverSecurity?: any;
+      staffMemos?: any[];
+      filterAlerts?: any[];
+      monitoredWords?: string[];
+      rolePermissions?: any;
+    }) => {
+      if (data.bannedList) setBannedList(data.bannedList);
+      if (data.serverSecurity) setServerSecurity(data.serverSecurity);
+      if (data.staffMemos) setStaffMemos(data.staffMemos);
+      if (data.filterAlerts) setFilterAlertsList(data.filterAlerts);
+      if (data.monitoredWords) setMonitoredWordsList(data.monitoredWords);
+      if (data.rolePermissions) setRolePermissions(data.rolePermissions);
     });
 
     // Emblems and Custom Emojis update listener
@@ -2646,7 +2687,7 @@ export default function App() {
     });
 
     // Global Appearance Updates for all users (التطبيق العام للثيم والخط لكافة المستخدمين)
-    s.on('globalAppearanceUpdated', (data: { theme?: string; fontFamily?: string; wallpaper?: string; bubbleStyle?: string }) => {
+    s.on('globalAppearanceUpdated', (data: { theme?: string; fontFamily?: string; wallpaper?: string; bubbleStyle?: string; bannerUrl?: string }) => {
       if (data.theme) {
         setActiveTheme(data.theme);
         localStorage.setItem('soqoor_theme', data.theme);
@@ -2662,6 +2703,9 @@ export default function App() {
       if (data.bubbleStyle) {
         setBubbleStyle(data.bubbleStyle);
         localStorage.setItem('soqoor_bubble_style', data.bubbleStyle);
+      }
+      if (data.bannerUrl !== undefined) {
+        setGlobalBannerUrl(data.bannerUrl);
       }
       showToast('📢 تم تطبيق وتعميم الثيم والخط العام على كافة الشات من الإدارة', 'info');
     });
@@ -3050,7 +3094,6 @@ export default function App() {
       if (sessionToken) {
         localStorage.setItem('soqoor_session_token', sessionToken);
       }
-      localStorage.setItem('soqoor_current_user', JSON.stringify(user));
       requestScreenWakeLock();
       startSilentAudioKeepAlive();
       startHeartbeatWorker(s);
@@ -3101,7 +3144,6 @@ export default function App() {
       if (sessionToken) {
         localStorage.setItem('soqoor_session_token', sessionToken);
       }
-      localStorage.setItem('soqoor_current_user', JSON.stringify(user));
       requestScreenWakeLock();
       startSilentAudioKeepAlive();
       startHeartbeatWorker(s);
@@ -3458,20 +3500,13 @@ export default function App() {
       // Only attempt session restore if the socket is actually disconnected
       if (s.connected) return;
       // Never force auto-login if user was force-logged out or not currently logged in
-      if (isForcedLoggedOutRef.current || !currentUserRef.current) return;
       const savedToken = localStorage.getItem('soqoor_session_token') || sessionStorage.getItem('soqoor_session_token');
-      const savedUserStr = localStorage.getItem('soqoor_current_user') || sessionStorage.getItem('soqoor_current_user');
-      let currentRoom = currentUserRef.current.room || 'الغرفة العامة';
-      if (savedToken && savedUserStr) {
-        try {
-          const parsed = JSON.parse(savedUserStr);
-          if (parsed.room) currentRoom = parsed.room;
-          s.emit('restoreSession', {
-            sessionToken: savedToken,
-            username: parsed.username,
-            room: parsed.room
-          });
-        } catch {}
+      let currentRoom = currentUserRef.current?.room || 'الغرفة العامة';
+      if (savedToken) {
+        s.emit('restoreSession', {
+          sessionToken: savedToken,
+          room: currentRoom
+        });
       }
       // Sync missed room messages so member sees everything that happened while away in background
       const lastMsg = messagesRef.current[messagesRef.current.length - 1];
@@ -3512,7 +3547,7 @@ export default function App() {
   }, [storiesList]);
 
   // Automatic Login directly into "الغرفة العامة"
-  const handleLogin = (e?: React.FormEvent) => {
+  const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!socket) return;
 
@@ -3535,30 +3570,61 @@ export default function App() {
       }).catch(() => {});
     }
 
-    // Check socket connection status before attempting login
-    if (!socket || !isConnected) {
-      setLoginError('تعذر الاتصال بسيرفر الدردشة! إذا كان الموقع مرفوعاً على Vercel، تأكد من ربط عنوان سيرفر الـ Backend عبر VITE_SERVER_URL أو استضافة المشروع على منصة تدعم Node.js و WebSockets مثل Render.');
-      setIsSubmitting(false);
-      return;
+    // Auto-Await Socket Connection:
+    // If the socket is still establishing its connection, wait smoothly and proceed automatically
+    const activeSocket = socket;
+    if (!activeSocket || !activeSocket.connected) {
+      if (activeSocket) {
+        activeSocket.connect();
+      }
+      setIsSubmitting(true);
+      setLoginError(null);
+
+      const isConnectedNow = await new Promise<boolean>((resolve) => {
+        if (activeSocket?.connected) {
+          resolve(true);
+          return;
+        }
+        const timer = setTimeout(() => {
+          resolve(Boolean(activeSocket?.connected));
+        }, 3500);
+
+        if (activeSocket) {
+          activeSocket.once('connect', () => {
+            clearTimeout(timer);
+            resolve(true);
+          });
+        }
+      });
+
+      if (!isConnectedNow && (!activeSocket || !activeSocket.connected)) {
+        setLoginError('جاري الاتصال بسيرفر الدردشة... يرجى الانتظار ثوانٍ قليلة حتى يكتمل الاتصال ثم إعادة المحاولة.');
+        setIsSubmitting(false);
+        return;
+      }
     }
 
     setIsSubmitting(true);
     setLoginError(null);
 
-    // Timeout safety net (8 seconds): prevents the button from hanging indefinitely on "جاري..."
+    // Timeout safety net (12 seconds): allows cloud servers (e.g. Railway) enough time to process on mobile networks
     const loginTimeoutTimer = setTimeout(() => {
       setIsSubmitting((prev) => {
         if (prev) {
-          setLoginError('انتهت مهلة استجابة السيرفر (Timeout). يرجى التحقق من اتصال السيرفر بالإنترنت وإعادة المحاولة.');
+          setLoginError('انتهت مهلة استجابة السيرفر. يرجى التحقق من اتصال الإنترنت وإعادة المحاولة.');
           return false;
         }
         return false;
       });
-    }, 8000);
+    }, 12000);
 
     const clearTimer = () => clearTimeout(loginTimeoutTimer);
     socket.once('loginSuccess', clearTimer);
     socket.once('loginError', clearTimer);
+    socket.once('disconnect', () => {
+      clearTimer();
+      setIsSubmitting(false);
+    });
 
     const defaultQuote = activeTab === 'visitor' ? 'زائر' : 'عضو جديد';
     const clientFingerprint = generateDeviceFingerprint().fingerprintId;
@@ -4552,25 +4618,31 @@ export default function App() {
     }
   };
 
-  // Local file upload helper: automatically routes videos and large media to the background progress pipeline!
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (dataUrl: string) => void) => {
+  // High-performance HTTP direct upload: Always stores images/media on server and returns short clean URL
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type.startsWith('video') || file.size > 2 * 1024 * 1024) {
-      handleMediaUpload(file);
+    if (file.size > 100 * 1024 * 1024) {
+      showToast('حجم الملف كبير جداً، الحد الأقصى المسموح 100 ميجابايت', 'error');
       e.target.value = '';
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        callback(reader.result);
+    try {
+      showToast('جاري رفع الملف إلى السيرفر... ⏳', 'info');
+      const res = await uploadMediaWithProgress(file);
+      if (res?.url) {
+        callback(res.url);
+        showToast('تم الرفع بنجاح ✅', 'success');
+      } else {
+        throw new Error('فشل استلام رابط صالح');
       }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+    } catch (err: any) {
+      showToast('فشل رفع الملف: ' + (err?.message || 'خطأ في الشبكة'), 'error');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   // Dedicated Wall Media Upload (Photos & Videos) with zero WebSocket freezing & HTTP progress
@@ -4774,23 +4846,28 @@ export default function App() {
             </div>
           </header>
 
-          {/* Banner with Majestic Falcon */}
-          <div className="relative w-full aspect-[2.1/1] overflow-hidden border-b border-[#2e261d]">
-            <img
-              src={bannerImg}
-              alt="شات حسان برو"
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent flex flex-col justify-end p-3 text-right">
-              <div className="text-amber-300 font-black text-lg drop-shadow-md">
-                شات حسان برو
+          {/* Banner (Dynamic uploaded banner or pure CSS header) */}
+          <div className="relative w-full aspect-[2.1/1] overflow-hidden border-b border-[#2e261d] bg-gradient-to-br from-[#241a12] via-[#362517] to-[#120d09] flex flex-col justify-end p-3 text-right">
+            {globalBannerUrl ? (
+              <img
+                src={globalBannerUrl}
+                alt="شات حسان برو"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            ) : null}
+            <div className="relative z-10 bg-gradient-to-t from-black/85 via-black/40 to-transparent -mx-3 -mb-3 p-3">
+              <div className="text-amber-300 font-black text-lg drop-shadow-md flex items-center justify-between">
+                <span>شات حسان برو 🦅</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-200 font-mono">
+                  {onlineCount} متصل
+                </span>
               </div>
-              <div className="text-[11px] text-amber-100/90 font-medium flex items-center gap-2">
+              <div className="text-[11px] text-amber-100/90 font-medium flex items-center gap-2 mt-0.5">
                 <span>🏆 مسابقات</span>
                 <span>🛡️ ترقيات</span>
                 <span>🎆 فعاليات</span>
               </div>
-              <div className="text-[10px] text-slate-300 font-mono">hassan-pro.com</div>
+              <div className="text-[10px] text-slate-300 font-mono mt-0.5">hassan-pro.com</div>
             </div>
           </div>
 
@@ -4861,7 +4938,10 @@ export default function App() {
                 <input
                   type="text"
                   value={usernameInput}
-                  onChange={(e) => setUsernameInput(e.target.value)}
+                  onChange={(e) => {
+                    setUsernameInput(e.target.value);
+                    if (loginError) setLoginError(null);
+                  }}
                   placeholder="اسم المستخدم..."
                   maxLength={30}
                   required
@@ -4875,7 +4955,10 @@ export default function App() {
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
+                    onChange={(e) => {
+                      setPasswordInput(e.target.value);
+                      if (loginError) setLoginError(null);
+                    }}
                     placeholder={activeTab === 'visitor' ? 'رمز أو كلمة مرور (اختياري)' : 'كلمة المرور...'}
                     autoComplete="current-password"
                     className={`w-full px-3 py-2 pr-8 border ${curTheme.fieldBorder || 'border-slate-400'} ${curTheme.fieldBg || 'bg-white'} rounded ${curTheme.fieldText || 'text-slate-900'} ${curTheme.fieldPlaceholder || 'placeholder-slate-400'} text-sm font-semibold outline-none ${curTheme.fieldFocus || 'focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600'} transition-all`}
@@ -4933,9 +5016,14 @@ export default function App() {
               </div>
 
               <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200 text-slate-600">
-                <div className="flex items-center gap-1">
-                  <span>العلم التلقائي (بالـ IP):</span>
-                  <span className="text-base">{detectedFlag}</span>
+                <div className="flex items-center gap-1.5 font-medium">
+                  <span>العلم الحقيقي (بالـ IP):</span>
+                  <span className="text-base leading-none px-1.5 py-0.5 bg-slate-100 rounded border border-slate-300 shadow-2xs font-normal">
+                    {detectedFlag || '🇾🇪'}
+                  </span>
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300 font-bold flex items-center gap-0.5">
+                    <span>محدد تلقائياً بالـ IP 🔒</span>
+                  </span>
                 </div>
                 <span className="text-[11px] text-emerald-600 font-bold">
                   ✓ الدخول التلقائي: الغرفة العامة
@@ -6347,17 +6435,12 @@ export default function App() {
                 if (socket) {
                   if (!socket.connected) socket.connect();
                   const savedToken = localStorage.getItem('soqoor_session_token');
-                  const savedUserStr = localStorage.getItem('soqoor_current_user');
-                  if (savedToken && savedUserStr) {
-                    try {
-                      const parsed = JSON.parse(savedUserStr);
-                      socket.emit('restoreSession', {
-                        sessionToken: savedToken,
-                        username: parsed.username,
-                        room: currentUser?.room || parsed.room || 'الغرفة العامة',
-                        deviceFingerprint: generateDeviceFingerprint().fingerprintId
-                      });
-                    } catch {}
+                  if (savedToken) {
+                    socket.emit('restoreSession', {
+                      sessionToken: savedToken,
+                      room: currentUser?.room || 'الغرفة العامة',
+                      deviceFingerprint: generateDeviceFingerprint().fingerprintId
+                    });
                   }
                 }
               }}
@@ -7937,20 +8020,10 @@ export default function App() {
                   />
                 </label>
 
-                {/* Sample Media quick send */}
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  {SAMPLE_MEDIA.map((url, i) => (
-                    <img
-                      key={i}
-                      src={url}
-                      alt="sample"
-                      onClick={() => {
-                        handleSendMessage(undefined, url, 'image');
-                        setShowMediaPicker(false);
-                      }}
-                      className="h-16 w-full object-cover rounded border border-slate-200 cursor-pointer hover:opacity-80"
-                    />
-                  ))}
+                {/* Media Upload Guidance */}
+                <div className="p-2 mb-2 bg-slate-50 border border-slate-200 rounded-lg text-center text-xs text-slate-600">
+                  <div className="font-bold text-slate-800 mb-0.5">رفع وسائط حية ومباشرة 📁</div>
+                  <div className="text-[11px] text-slate-500">اختر صورة أو فيديو من جهازك بالزر أعلاه أو أدخل رابطه المباشر بالأسفل</div>
                 </div>
 
                 {/* Custom Image or Video URL */}
@@ -10852,25 +10925,9 @@ export default function App() {
                   />
                 </label>
 
-                {/* Quick Avatar Grid */}
-                <div className="pt-1">
-                  <div className="text-[11px] font-bold text-slate-600 mb-1">أو اختر رمزية جاهزة:</div>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {SAMPLE_AVATARS.map((url, i) => (
-                      <img
-                        key={i}
-                        src={url}
-                        alt={`avatar-${i}`}
-                        onClick={() => {
-                          setSettingAvatar(url);
-                          showToast('تم اختيار الرمزية بنجاح', 'info');
-                        }}
-                        className={`w-12 h-12 rounded-lg object-cover border-2 cursor-pointer transition-transform hover:scale-105 ${
-                          settingAvatar === url ? 'border-indigo-600 ring-2 ring-indigo-400' : 'border-slate-200'
-                        }`}
-                      />
-                    ))}
-                  </div>
+                {/* Custom Avatar Guide */}
+                <div className="pt-1 text-[11px] text-slate-500 font-medium text-center">
+                  يمكنك رفع صورتك الشخصية الخاصة مباشرة من جهازك بالزر أعلاه، أو إدخال رابط صورتك بالأسفل.
                 </div>
 
                 {/* Custom Image URL */}
@@ -13713,17 +13770,12 @@ export default function App() {
                       if (socket) {
                         if (!socket.connected) socket.connect();
                         const savedToken = localStorage.getItem('soqoor_session_token');
-                        const savedUserStr = localStorage.getItem('soqoor_current_user');
-                        if (savedToken && savedUserStr) {
-                          try {
-                            const parsed = JSON.parse(savedUserStr);
-                            socket.emit('restoreSession', {
-                              sessionToken: savedToken,
-                              username: parsed.username,
-                              room: currentUser?.room || parsed.room || 'الغرفة العامة',
-                              deviceFingerprint: generateDeviceFingerprint().fingerprintId
-                            });
-                          } catch {}
+                        if (savedToken) {
+                          socket.emit('restoreSession', {
+                            sessionToken: savedToken,
+                            room: currentUser?.room || 'الغرفة العامة',
+                            deviceFingerprint: generateDeviceFingerprint().fingerprintId
+                          });
                         }
                         showToast('جاري استعادة ومزامنة الجلسة مع الخادم 🔄', 'info');
                       }
@@ -13750,6 +13802,7 @@ export default function App() {
             </div>
           </div>
         )}
+
 
       </div>
     </div>

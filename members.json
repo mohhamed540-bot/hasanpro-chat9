@@ -4,13 +4,29 @@
     "role": "admin",
     "flag": "👑",
     "statusQuote": "مدير عام شات حسان برو 🦅",
-    "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+    "avatarUrl": "",
     "likes": 10000,
     "points": 2000000,
     "honorBadge": "👑 المدير التنفيذي",
-    "ipAddress": "127.0.0.1",
-    "deviceInfo": "كمبيوتر / هاتف ذكي",
-    "deviceFingerprint": "FP-ADMIN-ORIGIN",
-    "lastSeen": 1791045576921
+    "ipAddress": "176.123.21.3",
+    "deviceInfo": "هاتف أندرويد (Android)",
+    "deviceFingerprint": "FP-1720-9FD0-46CU",
+    "lastSeen": 1791992631974,
+    "nameColor": "#d97706",
+    "textColor": "#0f172a",
+    "nameGradient": "from-amber-400 to-yellow-200",
+    "theme": "golden-brown-harmony",
+    "fontFamily": "Noto Naskh Arabic",
+    "wallpaper": "default",
+    "bubbleStyle": "modern",
+    "fontSize": "base",
+    "engagement": {
+      "activeTimeMinutes": 20,
+      "messagesSent": 0,
+      "wallPostsCount": 0,
+      "micTimeMinutes": 0,
+      "starsLevel": 0.3,
+      "progressPercent": 33
+    }
   }
 }

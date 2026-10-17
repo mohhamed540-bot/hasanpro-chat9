@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   X
 } from 'lucide-react';
+import { DEFAULT_AVATAR_SVG } from '../utils/avatarConstants';
 
 export interface CallPartner {
   id: string;
@@ -201,7 +202,7 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
             <div className="absolute -inset-3 bg-emerald-500/30 rounded-full animate-ping" />
             <div className="absolute -inset-1.5 bg-amber-500/40 rounded-full animate-pulse" />
             <img
-              src={incomingCall.fromUser.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=falcon'}
+              src={incomingCall.fromUser.avatarUrl || DEFAULT_AVATAR_SVG}
               alt={incomingCall.fromUser.username}
               className="relative w-24 h-24 rounded-full object-cover border-2 border-amber-400 shadow-xl"
             />
@@ -260,7 +261,7 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
         <div className="fixed bottom-16 right-4 z-50 bg-[#1c150e]/95 border border-amber-500/50 rounded-2xl p-2.5 shadow-2xl flex items-center gap-3 backdrop-blur-md animate-in slide-in-from-bottom duration-200 text-right">
           <div className="relative">
             <img
-              src={activeCall.partner.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=falcon'}
+              src={activeCall.partner.avatarUrl || DEFAULT_AVATAR_SVG}
               alt={activeCall.partner.username}
               className="w-10 h-10 rounded-full object-cover border border-amber-400"
             />
@@ -334,7 +335,7 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
                 />
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/30 backdrop-blur-[2px]">
                   <img
-                    src={activeCall.partner.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=falcon'}
+                    src={activeCall.partner.avatarUrl || DEFAULT_AVATAR_SVG}
                     alt={activeCall.partner.username}
                     className="w-20 h-20 rounded-full object-cover border-2 border-amber-400 shadow-xl"
                   />
@@ -359,7 +360,7 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
                   <div className="absolute -inset-4 bg-amber-500/10 rounded-full animate-ping" />
                   <div className="absolute -inset-2 bg-amber-500/20 rounded-full animate-pulse" />
                   <img
-                    src={activeCall.partner.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=falcon'}
+                    src={activeCall.partner.avatarUrl || DEFAULT_AVATAR_SVG}
                     alt={activeCall.partner.username}
                     className="relative w-28 h-28 rounded-full object-cover border-2 border-amber-400 shadow-2xl"
                   />
